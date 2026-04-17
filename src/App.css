@@ -224,6 +224,29 @@
   background: #eef6ff;
 }
 
+.allocation-summary-card {
+  margin-bottom: 28px;
+  border: 1px solid #dbe5f0;
+  border-radius: 14px;
+  padding: 18px;
+  background: #f8fbff;
+}
+
+.summary-block-header {
+  margin-bottom: 14px;
+}
+
+.summary-block-header h3 {
+  margin: 0 0 6px;
+  color: #0f172a;
+  font-size: 1.05rem;
+}
+
+.summary-block-header p {
+  margin: 0;
+  color: #52606d;
+}
+
 .transfer-summary {
   display: grid;
   gap: 12px;
@@ -282,6 +305,10 @@
   }
 
   .budget-section {
+    padding: 14px;
+  }
+
+  .allocation-summary-card {
     padding: 14px;
   }
 

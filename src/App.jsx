@@ -13,6 +13,10 @@ const annualMultipliers = {
 
 const emptyTotals = { weekly: 0, fortnightly: 0, monthly: 0, annual: 0 }
 
+function createEmptyTotals() {
+  return { weekly: 0, fortnightly: 0, monthly: 0, annual: 0 }
+}
+
 const initialBudgetSections = [
   {
     id: 'shane-income',
@@ -391,6 +395,37 @@ function calculateSectionTotals(rows) {
   )
 }
 
+function calculateAllocatedExpenseTotals(sections) {
+  return sections
+    .filter((section) => section.category === 'Expenses')
+    .reduce(
+      (groupTotals, section) => {
+        section.rows.forEach((row) => {
+          const allocation = allocationOptions.includes(row.allocation)
+            ? row.allocation
+            : 'Unassigned'
+          const amounts = calculateRowAmounts(row)
+
+          groupTotals[allocation] = {
+            weekly: groupTotals[allocation].weekly + amounts.weekly,
+            fortnightly:
+              groupTotals[allocation].fortnightly + amounts.fortnightly,
+            monthly: groupTotals[allocation].monthly + amounts.monthly,
+            annual: groupTotals[allocation].annual + amounts.annual,
+          }
+        })
+
+        return groupTotals
+      },
+      {
+        Shane: createEmptyTotals(),
+        Erika: createEmptyTotals(),
+        Shared: createEmptyTotals(),
+        Unassigned: createEmptyTotals(),
+      },
+    )
+}
+
 function calculateDifferenceTotals(incomeTotals, transferTotals) {
   return {
     annual: incomeTotals.annual - transferTotals.annual,
@@ -572,6 +607,7 @@ export default function App() {
     erikaIncomeTotals,
     erikaTransferTotals,
   )
+  const allocatedExpenseTotals = calculateAllocatedExpenseTotals(budgetSections)
 
   return (
     <main className="budget-page">
@@ -782,6 +818,46 @@ export default function App() {
             <h2>Transfer Planner</h2>
             <p>Plan each person&apos;s transfers using the same time-based view as the main budget.</p>
           </div>
+
+          <section className="allocation-summary-card">
+            <div className="summary-block-header">
+              <h3>Allocated Expenses Summary</h3>
+              <p>Expense totals grouped by the current allocation selected in the budget.</p>
+            </div>
+
+            <div className="table-wrap">
+              <table className="budget-table allocation-summary-table">
+                <thead>
+                  <tr>
+                    <th>Allocation</th>
+                    <th>Weekly</th>
+                    <th>Fortnightly</th>
+                    <th>Monthly</th>
+                    <th>Annual</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allocationOptions.map((allocation) => (
+                    <tr key={allocation}>
+                      <td>{allocation}</td>
+                      <td className="calculated-cell">
+                        {formatAmount(allocatedExpenseTotals[allocation].weekly)}
+                      </td>
+                      <td className="calculated-cell">
+                        {formatAmount(allocatedExpenseTotals[allocation].fortnightly)}
+                      </td>
+                      <td className="calculated-cell">
+                        {formatAmount(allocatedExpenseTotals[allocation].monthly)}
+                      </td>
+                      <td className="calculated-cell">
+                        {formatAmount(allocatedExpenseTotals[allocation].annual)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
           <div className="transfer-list">
             {transferSections.map((section) => {
