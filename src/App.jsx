@@ -3,6 +3,7 @@ import './App.css'
 
 const storageKey = 'family-budget-sections'
 const frequencyOptions = ['Weekly', 'Fortnightly', 'Monthly', 'Annually']
+const allocationOptions = ['Shane', 'Erika', 'Shared', 'Unassigned']
 const annualMultipliers = {
   Weekly: 52,
   Fortnightly: 26,
@@ -10,7 +11,7 @@ const annualMultipliers = {
   Annually: 1,
 }
 
-const emptyTotals = { annual: 0, monthly: 0, fortnightly: 0, weekly: 0 }
+const emptyTotals = { weekly: 0, fortnightly: 0, monthly: 0, annual: 0 }
 
 const initialBudgetSections = [
   {
@@ -168,6 +169,22 @@ function isValidBudgetSections(value) {
   )
 }
 
+function normalizeBudgetSections(sections) {
+  return sections.map((section) => ({
+    ...section,
+    rows: section.rows.map((row) =>
+      section.category === 'Expenses'
+        ? {
+            ...row,
+            allocation: allocationOptions.includes(row.allocation)
+              ? row.allocation
+              : 'Unassigned',
+          }
+        : row,
+    ),
+  }))
+}
+
 function isValidTransferSections(value) {
   return (
     Array.isArray(value) &&
@@ -212,7 +229,7 @@ function getInitialAppState() {
 
     if (isValidBudgetSections(parsedData)) {
       return {
-        budgetSections: parsedData,
+        budgetSections: normalizeBudgetSections(parsedData),
         transferSections: initialTransferSections,
       }
     }
@@ -222,7 +239,10 @@ function getInitialAppState() {
       isValidBudgetSections(parsedData.budgetSections) &&
       isValidTransferSections(parsedData.transferSections)
     ) {
-      return parsedData
+      return {
+        ...parsedData,
+        budgetSections: normalizeBudgetSections(parsedData.budgetSections),
+      }
     }
   } catch {
     return {
@@ -288,7 +308,7 @@ function formatAmount(value) {
   return (Number.isFinite(value) ? value : 0).toFixed(2)
 }
 
-function createEmptyBudgetRow(rows) {
+function createEmptyBudgetRow(rows, category) {
   const nextId = rows.length > 0 ? Math.max(...rows.map((row) => row.id)) + 1 : 1
 
   return {
@@ -296,6 +316,7 @@ function createEmptyBudgetRow(rows) {
     description: '',
     amount: '',
     frequency: 'Weekly',
+    ...(category === 'Expenses' ? { allocation: 'Unassigned' } : {}),
   }
 }
 
@@ -313,10 +334,10 @@ function createEmptyTransferRow(rows) {
 function renderSummaryValues(totals) {
   return (
     <div className="summary-values">
-      <strong>Annual {formatAmount(totals.annual)}</strong>
-      <strong>Monthly {formatAmount(totals.monthly)}</strong>
-      <strong>Fortnightly {formatAmount(totals.fortnightly)}</strong>
       <strong>Weekly {formatAmount(totals.weekly)}</strong>
+      <strong>Fortnightly {formatAmount(totals.fortnightly)}</strong>
+      <strong>Monthly {formatAmount(totals.monthly)}</strong>
+      <strong>Annual {formatAmount(totals.annual)}</strong>
     </div>
   )
 }
@@ -327,6 +348,7 @@ export default function App() {
   const [transferSections, setTransferSections] = useState(
     initialAppState.transferSections,
   )
+  const [activeTab, setActiveTab] = useState('budget')
   const hasLoadedInitialState = useRef(false)
 
   useEffect(() => {
@@ -362,7 +384,7 @@ export default function App() {
         section.id === sectionId
           ? {
               ...section,
-              rows: [...section.rows, createEmptyBudgetRow(section.rows)],
+              rows: [...section.rows, createEmptyBudgetRow(section.rows, section.category)],
             }
           : section,
       ),
@@ -434,22 +456,18 @@ export default function App() {
     return [...groups, { title: section.category, sections: [section] }]
   }, [])
 
-  const shaneIncomeTotals =
-    calculateSectionTotals(
-      budgetSections.find((section) => section.id === 'shane-income')?.rows ?? [],
-    )
-  const erikaIncomeTotals =
-    calculateSectionTotals(
-      budgetSections.find((section) => section.id === 'erika-income')?.rows ?? [],
-    )
-  const shaneTransferTotals =
-    calculateSectionTotals(
-      transferSections.find((section) => section.id === 'shane-transfers')?.rows ?? [],
-    )
-  const erikaTransferTotals =
-    calculateSectionTotals(
-      transferSections.find((section) => section.id === 'erika-transfers')?.rows ?? [],
-    )
+  const shaneIncomeTotals = calculateSectionTotals(
+    budgetSections.find((section) => section.id === 'shane-income')?.rows ?? [],
+  )
+  const erikaIncomeTotals = calculateSectionTotals(
+    budgetSections.find((section) => section.id === 'erika-income')?.rows ?? [],
+  )
+  const shaneTransferTotals = calculateSectionTotals(
+    transferSections.find((section) => section.id === 'shane-transfers')?.rows ?? [],
+  )
+  const erikaTransferTotals = calculateSectionTotals(
+    transferSections.find((section) => section.id === 'erika-transfers')?.rows ?? [],
+  )
   const shaneRemainingTotals = calculateDifferenceTotals(
     shaneIncomeTotals,
     shaneTransferTotals,
@@ -461,96 +479,125 @@ export default function App() {
 
   return (
     <main className="budget-page">
-      <section className="budget-card">
-        <div className="budget-header">
-          <h1>Family Budget</h1>
-          <p>Track income and expenses in simple editable sections.</p>
-        </div>
+      <div className="page-header">
+        <h1>Family Budget</h1>
+        <p>Track income, expenses, and transfers in simple editable sections.</p>
+      </div>
 
-        <div className="budget-groups">
-          {groupedSections.map((group) => (
-            <section key={group.title} className="budget-group">
-              <div className="group-header">
-                <h2>{group.title}</h2>
-              </div>
+      <div className="tab-bar" role="tablist" aria-label="Budget views">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'budget'}
+          className={activeTab === 'budget' ? 'tab-button active' : 'tab-button'}
+          onClick={() => setActiveTab('budget')}
+        >
+          Budget
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'transfers'}
+          className={activeTab === 'transfers' ? 'tab-button active' : 'tab-button'}
+          onClick={() => setActiveTab('transfers')}
+        >
+          Transfer Planner
+        </button>
+      </div>
 
-              <div className="section-list">
+      {activeTab === 'budget' ? (
+        <section className="budget-card">
+          <div className="budget-header">
+            <h2>Budget</h2>
+            <p>Review and edit the main household budget sections.</p>
+          </div>
+
+          <div className="budget-groups">
+            {groupedSections.map((group) => (
+              <section key={group.title} className="budget-group">
+                <div className="group-header">
+                  <h2>{group.title}</h2>
+                </div>
+
+                <div className="section-list">
                 {group.sections.map((section) => {
                   const totals = calculateSectionTotals(section.rows)
+                  const isExpenseSection = section.category === 'Expenses'
 
                   return (
                     <article key={section.id} className="budget-section">
-                      <div className="section-header">
-                        <h3>{section.title}</h3>
-                        <button
-                          type="button"
-                          className="section-action"
-                          onClick={() => handleAddRow(section.id)}
-                        >
-                          Add row
-                        </button>
-                      </div>
+                        <div className="section-header">
+                          <h3>{section.title}</h3>
+                          <button
+                            type="button"
+                            className="section-action"
+                            onClick={() => handleAddRow(section.id)}
+                          >
+                            Add row
+                          </button>
+                        </div>
 
-                      <div className="table-wrap">
-                        <table className="budget-table">
-                          <thead>
+                        <div className="table-wrap">
+                          <table className="budget-table">
+                            <thead>
                             <tr>
                               <th>Description</th>
                               <th>Amount</th>
                               <th>Frequency</th>
-                              <th>Annual</th>
-                              <th>Monthly</th>
-                              <th>Fortnightly</th>
+                              {isExpenseSection ? <th>Allocation</th> : null}
                               <th>Weekly</th>
-                              <th>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {section.rows.map((row) => {
-                              const amounts = calculateRowAmounts(row)
+                              <th>Fortnightly</th>
+                              <th>Monthly</th>
+                                <th>Annual</th>
+                                <th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {section.rows.map((row) => {
+                                const amounts = calculateRowAmounts(row)
 
-                              return (
-                                <tr key={row.id}>
-                                  <td className="description-cell">
-                                    <textarea
-                                      rows="3"
-                                      className="description-input"
-                                      value={row.description}
-                                      onChange={(event) =>
-                                        handleItemChange(
-                                          section.id,
-                                          row.id,
-                                          'description',
-                                          event.target.value,
-                                        )
-                                      }
-                                    />
-                                  </td>
-                                  <td>
-                                    <input
-                                      type="text"
-                                      value={row.amount}
-                                      onChange={(event) =>
-                                        handleItemChange(
-                                          section.id,
-                                          row.id,
-                                          'amount',
-                                          event.target.value,
-                                        )
-                                      }
-                                    />
-                                  </td>
-                                  <td>
-                                    <select
-                                      value={row.frequency}
-                                      onChange={(event) =>
-                                        handleItemChange(
-                                          section.id,
-                                          row.id,
-                                          'frequency',
-                                          event.target.value,
-                                        )
-                                      }
+                                return (
+                                  <tr key={row.id}>
+                                    <td className="description-cell">
+                                      <textarea
+                                        rows="3"
+                                        className="description-input"
+                                        value={row.description}
+                                        onChange={(event) =>
+                                          handleItemChange(
+                                            section.id,
+                                            row.id,
+                                            'description',
+                                            event.target.value,
+                                          )
+                                        }
+                                      />
+                                    </td>
+                                    <td>
+                                      <input
+                                        type="text"
+                                        value={row.amount}
+                                        onChange={(event) =>
+                                          handleItemChange(
+                                            section.id,
+                                            row.id,
+                                            'amount',
+                                            event.target.value,
+                                          )
+                                        }
+                                      />
+                                    </td>
+                                    <td>
+                                      <select
+                                        value={row.frequency}
+                                        onChange={(event) =>
+                                          handleItemChange(
+                                            section.id,
+                                            row.id,
+                                            'frequency',
+                                            event.target.value,
+                                          )
+                                        }
                                     >
                                       {frequencyOptions.map((option) => (
                                         <option key={option} value={option}>
@@ -559,232 +606,254 @@ export default function App() {
                                       ))}
                                     </select>
                                   </td>
-                                  <td className="calculated-cell">
-                                    {formatAmount(amounts.annual)}
-                                  </td>
-                                  <td className="calculated-cell">
-                                    {formatAmount(amounts.monthly)}
-                                  </td>
-                                  <td className="calculated-cell">
-                                    {formatAmount(amounts.fortnightly)}
-                                  </td>
+                                  {isExpenseSection ? (
+                                    <td className="allocation-cell">
+                                      <select
+                                        value={row.allocation ?? 'Unassigned'}
+                                        onChange={(event) =>
+                                          handleItemChange(
+                                            section.id,
+                                            row.id,
+                                            'allocation',
+                                            event.target.value,
+                                          )
+                                        }
+                                      >
+                                        {allocationOptions.map((option) => (
+                                          <option key={option} value={option}>
+                                            {option}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </td>
+                                  ) : null}
                                   <td className="calculated-cell">
                                     {formatAmount(amounts.weekly)}
                                   </td>
-                                  <td className="actions-cell">
-                                    <button
-                                      type="button"
-                                      className="row-delete-button"
-                                      onClick={() =>
-                                        handleDeleteRow(section.id, row.id)
-                                      }
-                                    >
-                                      Delete
-                                    </button>
-                                  </td>
-                                </tr>
+                                    <td className="calculated-cell">
+                                      {formatAmount(amounts.fortnightly)}
+                                    </td>
+                                    <td className="calculated-cell">
+                                      {formatAmount(amounts.monthly)}
+                                    </td>
+                                    <td className="calculated-cell">
+                                      {formatAmount(amounts.annual)}
+                                    </td>
+                                    <td className="actions-cell">
+                                      <button
+                                        type="button"
+                                        className="row-delete-button"
+                                        onClick={() =>
+                                          handleDeleteRow(section.id, row.id)
+                                        }
+                                      >
+                                        Delete
+                                      </button>
+                                    </td>
+                                  </tr>
                               )
                             })}
                             <tr className="subtotal-row">
-                              <td colSpan="3">Section subtotal</td>
-                              <td className="calculated-cell">
-                                {formatAmount(totals.annual)}
+                                <td colSpan={isExpenseSection ? 4 : 3}>Section subtotal</td>
+                                <td className="calculated-cell">
+                                  {formatAmount(totals.weekly)}
+                                </td>
+                                <td className="calculated-cell">
+                                  {formatAmount(totals.fortnightly)}
+                                </td>
+                                <td className="calculated-cell">
+                                  {formatAmount(totals.monthly)}
+                                </td>
+                                <td className="calculated-cell">
+                                  {formatAmount(totals.annual)}
+                                </td>
+                                <td className="actions-cell" />
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </article>
+                    )
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <section className="transfer-card">
+          <div className="budget-header">
+            <h2>Transfer Planner</h2>
+            <p>Plan each person&apos;s transfers using the same time-based view as the main budget.</p>
+          </div>
+
+          <div className="transfer-list">
+            {transferSections.map((section) => {
+              const totals = calculateSectionTotals(section.rows)
+              const remaining =
+                section.person === 'Shane'
+                  ? calculateDifferenceTotals(shaneIncomeTotals, totals)
+                  : calculateDifferenceTotals(erikaIncomeTotals, totals)
+
+              return (
+                <article key={section.id} className="budget-section transfer-section">
+                  <div className="section-header">
+                    <h3>{section.title}</h3>
+                    <button
+                      type="button"
+                      className="section-action"
+                      onClick={() => handleAddTransferRow(section.id)}
+                    >
+                      Add row
+                    </button>
+                  </div>
+
+                  <div className="table-wrap">
+                    <table className="budget-table transfer-table">
+                      <thead>
+                        <tr>
+                          <th>Description</th>
+                          <th>Amount</th>
+                          <th>Frequency</th>
+                          <th>Weekly</th>
+                          <th>Fortnightly</th>
+                          <th>Monthly</th>
+                          <th>Annual</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {section.rows.map((row) => {
+                          const amounts = calculateRowAmounts(row)
+
+                          return (
+                            <tr key={row.id}>
+                              <td className="description-cell">
+                                <textarea
+                                  rows="3"
+                                  className="description-input"
+                                  value={row.description}
+                                  onChange={(event) =>
+                                    handleTransferChange(
+                                      section.id,
+                                      row.id,
+                                      'description',
+                                      event.target.value,
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={row.amount}
+                                  onChange={(event) =>
+                                    handleTransferChange(
+                                      section.id,
+                                      row.id,
+                                      'amount',
+                                      event.target.value,
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <select
+                                  value={row.frequency}
+                                  onChange={(event) =>
+                                    handleTransferChange(
+                                      section.id,
+                                      row.id,
+                                      'frequency',
+                                      event.target.value,
+                                    )
+                                  }
+                                >
+                                  {frequencyOptions.map((option) => (
+                                    <option key={option} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
                               </td>
                               <td className="calculated-cell">
-                                {formatAmount(totals.monthly)}
+                                {formatAmount(amounts.weekly)}
                               </td>
                               <td className="calculated-cell">
-                                {formatAmount(totals.fortnightly)}
+                                {formatAmount(amounts.fortnightly)}
                               </td>
                               <td className="calculated-cell">
-                                {formatAmount(totals.weekly)}
+                                {formatAmount(amounts.monthly)}
                               </td>
-                              <td className="actions-cell" />
+                              <td className="calculated-cell">
+                                {formatAmount(amounts.annual)}
+                              </td>
+                              <td className="actions-cell">
+                                <button
+                                  type="button"
+                                  className="row-delete-button"
+                                  onClick={() =>
+                                    handleDeleteTransferRow(section.id, row.id)
+                                  }
+                                >
+                                  Delete
+                                </button>
+                              </td>
                             </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </article>
-                  )
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
-      </section>
-
-      <section className="transfer-card">
-        <div className="budget-header">
-          <h2>Transfer Planner</h2>
-          <p>Plan each person&apos;s transfers using the same time-based view as the main budget.</p>
-        </div>
-
-        <div className="transfer-list">
-          {transferSections.map((section) => {
-            const totals = calculateSectionTotals(section.rows)
-            const remaining =
-              section.person === 'Shane'
-                ? calculateDifferenceTotals(shaneIncomeTotals, totals)
-                : calculateDifferenceTotals(erikaIncomeTotals, totals)
-
-            return (
-              <article key={section.id} className="budget-section transfer-section">
-                <div className="section-header">
-                  <h3>{section.title}</h3>
-                  <button
-                    type="button"
-                    className="section-action"
-                    onClick={() => handleAddTransferRow(section.id)}
-                  >
-                    Add row
-                  </button>
-                </div>
-
-                <div className="table-wrap">
-                  <table className="budget-table transfer-table">
-                    <thead>
-                      <tr>
-                        <th>Description</th>
-                        <th>Amount</th>
-                        <th>Frequency</th>
-                        <th>Annual</th>
-                        <th>Monthly</th>
-                        <th>Fortnightly</th>
-                        <th>Weekly</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {section.rows.map((row) => {
-                        const amounts = calculateRowAmounts(row)
-
-                        return (
-                          <tr key={row.id}>
-                            <td className="description-cell">
-                              <textarea
-                                rows="3"
-                                className="description-input"
-                                value={row.description}
-                                onChange={(event) =>
-                                  handleTransferChange(
-                                    section.id,
-                                    row.id,
-                                    'description',
-                                    event.target.value,
-                                  )
-                                }
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="text"
-                                value={row.amount}
-                                onChange={(event) =>
-                                  handleTransferChange(
-                                    section.id,
-                                    row.id,
-                                    'amount',
-                                    event.target.value,
-                                  )
-                                }
-                              />
-                            </td>
-                            <td>
-                              <select
-                                value={row.frequency}
-                                onChange={(event) =>
-                                  handleTransferChange(
-                                    section.id,
-                                    row.id,
-                                    'frequency',
-                                    event.target.value,
-                                  )
-                                }
-                              >
-                                {frequencyOptions.map((option) => (
-                                  <option key={option} value={option}>
-                                    {option}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                            <td className="calculated-cell">
-                              {formatAmount(amounts.annual)}
-                            </td>
-                            <td className="calculated-cell">
-                              {formatAmount(amounts.monthly)}
-                            </td>
-                            <td className="calculated-cell">
-                              {formatAmount(amounts.fortnightly)}
-                            </td>
-                            <td className="calculated-cell">
-                              {formatAmount(amounts.weekly)}
-                            </td>
-                            <td className="actions-cell">
-                              <button
-                                type="button"
-                                className="row-delete-button"
-                                onClick={() =>
-                                  handleDeleteTransferRow(section.id, row.id)
-                                }
-                              >
-                                Delete
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                      <tr className="subtotal-row">
-                        <td colSpan="3">Transfer subtotal</td>
-                        <td className="calculated-cell">
-                          {formatAmount(totals.annual)}
-                        </td>
-                        <td className="calculated-cell">
-                          {formatAmount(totals.monthly)}
-                        </td>
-                        <td className="calculated-cell">
-                          {formatAmount(totals.fortnightly)}
-                        </td>
-                        <td className="calculated-cell">
-                          {formatAmount(totals.weekly)}
-                        </td>
-                        <td className="actions-cell" />
-                      </tr>
-                      <tr className="remaining-row">
-                        <td colSpan="3">Remaining after transfers</td>
-                        <td className="calculated-cell">
-                          {formatAmount(remaining.annual)}
-                        </td>
-                        <td className="calculated-cell">
-                          {formatAmount(remaining.monthly)}
-                        </td>
-                        <td className="calculated-cell">
-                          {formatAmount(remaining.fortnightly)}
-                        </td>
-                        <td className="calculated-cell">
-                          {formatAmount(remaining.weekly)}
-                        </td>
-                        <td className="actions-cell" />
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </article>
-            )
-          })}
-        </div>
-
-        <div className="transfer-summary">
-          <div className="summary-item">
-            <span>Remaining after transfers for Shane</span>
-            {renderSummaryValues(shaneRemainingTotals)}
+                          )
+                        })}
+                        <tr className="subtotal-row">
+                          <td colSpan="3">Transfer subtotal</td>
+                          <td className="calculated-cell">
+                            {formatAmount(totals.weekly)}
+                          </td>
+                          <td className="calculated-cell">
+                            {formatAmount(totals.fortnightly)}
+                          </td>
+                          <td className="calculated-cell">
+                            {formatAmount(totals.monthly)}
+                          </td>
+                          <td className="calculated-cell">
+                            {formatAmount(totals.annual)}
+                          </td>
+                          <td className="actions-cell" />
+                        </tr>
+                        <tr className="remaining-row">
+                          <td colSpan="3">Remaining after transfers</td>
+                          <td className="calculated-cell">
+                            {formatAmount(remaining.weekly)}
+                          </td>
+                          <td className="calculated-cell">
+                            {formatAmount(remaining.fortnightly)}
+                          </td>
+                          <td className="calculated-cell">
+                            {formatAmount(remaining.monthly)}
+                          </td>
+                          <td className="calculated-cell">
+                            {formatAmount(remaining.annual)}
+                          </td>
+                          <td className="actions-cell" />
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+              )
+            })}
           </div>
-          <div className="summary-item">
-            <span>Remaining after transfers for Erika</span>
-            {renderSummaryValues(erikaRemainingTotals)}
+
+          <div className="transfer-summary">
+            <div className="summary-item">
+              <span>Remaining after transfers for Shane</span>
+              {renderSummaryValues(shaneRemainingTotals)}
+            </div>
+            <div className="summary-item">
+              <span>Remaining after transfers for Erika</span>
+              {renderSummaryValues(erikaRemainingTotals)}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
     </main>
   )
 }
