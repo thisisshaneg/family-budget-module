@@ -224,6 +224,19 @@
   background: #eef6ff;
 }
 
+.allocation-planning-card {
+  margin-bottom: 28px;
+  border: 1px solid #dbe5f0;
+  border-radius: 14px;
+  padding: 18px;
+  background: #f8fbff;
+}
+
+.generated-planning-list {
+  display: grid;
+  gap: 18px;
+}
+
 .allocation-summary-card {
   margin-bottom: 28px;
   border: 1px solid #dbe5f0;
@@ -245,6 +258,11 @@
 .summary-block-header p {
   margin: 0;
   color: #52606d;
+}
+
+.shared-allocation-table th,
+.shared-allocation-table td {
+  white-space: nowrap;
 }
 
 .transfer-summary {
@@ -308,6 +326,7 @@
     padding: 14px;
   }
 
+  .allocation-planning-card,
   .allocation-summary-card {
     padding: 14px;
   }

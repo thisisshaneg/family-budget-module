@@ -17,6 +17,17 @@ function createEmptyTotals() {
   return { weekly: 0, fortnightly: 0, monthly: 0, annual: 0 }
 }
 
+function createEmptySharedContributionEntry() {
+  return {
+    shane: { amount: '', frequency: 'Weekly' },
+    erika: { amount: '', frequency: 'Weekly' },
+  }
+}
+
+function getExpenseItemKey(sectionId, rowId) {
+  return `${sectionId}:${rowId}`
+}
+
 const initialBudgetSections = [
   {
     id: 'shane-income',
@@ -307,21 +318,52 @@ function isValidTransferSections(value) {
   )
 }
 
+function isValidContributionPerson(value) {
+  return (
+    value &&
+    typeof value.amount === 'string' &&
+    frequencyOptions.includes(value.frequency)
+  )
+}
+
+function isValidSharedContributionPlans(value) {
+  return (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.values(value).every(
+      (entry) =>
+        entry &&
+        typeof entry === 'object' &&
+        isValidContributionPerson(entry.shane) &&
+        isValidContributionPerson(entry.erika),
+    )
+  )
+}
+
+function normalizeSharedContributionPlans(value) {
+  if (!isValidSharedContributionPlans(value)) {
+    return {}
+  }
+
+  return value
+}
+
 function getInitialAppState() {
+  const fallbackState = {
+    budgetSections: normalizeBudgetSections(initialBudgetSections),
+    transferSections: initialTransferSections,
+    sharedContributionPlans: {},
+  }
+
   if (typeof window === 'undefined') {
-    return {
-      budgetSections: normalizeBudgetSections(initialBudgetSections),
-      transferSections: initialTransferSections,
-    }
+    return fallbackState
   }
 
   const savedData = window.localStorage.getItem(storageKey)
 
   if (!savedData) {
-    return {
-      budgetSections: normalizeBudgetSections(initialBudgetSections),
-      transferSections: initialTransferSections,
-    }
+    return fallbackState
   }
 
   try {
@@ -331,6 +373,7 @@ function getInitialAppState() {
       return {
         budgetSections: normalizeBudgetSections(parsedData),
         transferSections: initialTransferSections,
+        sharedContributionPlans: {},
       }
     }
 
@@ -342,19 +385,16 @@ function getInitialAppState() {
       return {
         ...parsedData,
         budgetSections: normalizeBudgetSections(parsedData.budgetSections),
+        sharedContributionPlans: normalizeSharedContributionPlans(
+          parsedData.sharedContributionPlans,
+        ),
       }
     }
   } catch {
-    return {
-      budgetSections: normalizeBudgetSections(initialBudgetSections),
-      transferSections: initialTransferSections,
-    }
+    return fallbackState
   }
 
-  return {
-    budgetSections: normalizeBudgetSections(initialBudgetSections),
-    transferSections: initialTransferSections,
-  }
+  return fallbackState
 }
 
 function calculateAnnualAmount(amount, frequency) {
@@ -395,37 +435,6 @@ function calculateSectionTotals(rows) {
   )
 }
 
-function calculateAllocatedExpenseTotals(sections) {
-  return sections
-    .filter((section) => section.category === 'Expenses')
-    .reduce(
-      (groupTotals, section) => {
-        section.rows.forEach((row) => {
-          const allocation = allocationOptions.includes(row.allocation)
-            ? row.allocation
-            : 'Unassigned'
-          const amounts = calculateRowAmounts(row)
-
-          groupTotals[allocation] = {
-            weekly: groupTotals[allocation].weekly + amounts.weekly,
-            fortnightly:
-              groupTotals[allocation].fortnightly + amounts.fortnightly,
-            monthly: groupTotals[allocation].monthly + amounts.monthly,
-            annual: groupTotals[allocation].annual + amounts.annual,
-          }
-        })
-
-        return groupTotals
-      },
-      {
-        Shane: createEmptyTotals(),
-        Erika: createEmptyTotals(),
-        Shared: createEmptyTotals(),
-        Unassigned: createEmptyTotals(),
-      },
-    )
-}
-
 function calculateDifferenceTotals(incomeTotals, transferTotals) {
   return {
     annual: incomeTotals.annual - transferTotals.annual,
@@ -433,6 +442,34 @@ function calculateDifferenceTotals(incomeTotals, transferTotals) {
     fortnightly: incomeTotals.fortnightly - transferTotals.fortnightly,
     weekly: incomeTotals.weekly - transferTotals.weekly,
   }
+}
+
+function buildAllocatedExpenseGroups(sections) {
+  return sections
+    .filter((section) => section.category === 'Expenses')
+    .reduce(
+      (groups, section) => {
+        section.rows.forEach((row) => {
+          const allocation = allocationOptions.includes(row.allocation)
+            ? row.allocation
+            : 'Unassigned'
+
+          groups[allocation].push({
+            key: getExpenseItemKey(section.id, row.id),
+            description: row.description,
+            amounts: calculateRowAmounts(row),
+          })
+        })
+
+        return groups
+      },
+      {
+        Shane: [],
+        Erika: [],
+        Shared: [],
+        Unassigned: [],
+      },
+    )
 }
 
 function formatAmount(value) {
@@ -479,6 +516,9 @@ export default function App() {
   const [transferSections, setTransferSections] = useState(
     initialAppState.transferSections,
   )
+  const [sharedContributionPlans, setSharedContributionPlans] = useState(
+    initialAppState.sharedContributionPlans,
+  )
   const [activeTab, setActiveTab] = useState('budget')
   const hasLoadedInitialState = useRef(false)
 
@@ -490,9 +530,13 @@ export default function App() {
 
     window.localStorage.setItem(
       storageKey,
-      JSON.stringify({ budgetSections, transferSections }),
+      JSON.stringify({
+        budgetSections,
+        transferSections,
+        sharedContributionPlans,
+      }),
     )
-  }, [budgetSections, transferSections])
+  }, [budgetSections, transferSections, sharedContributionPlans])
 
   function handleItemChange(sectionId, rowId, field, value) {
     setBudgetSections((currentSections) =>
@@ -576,6 +620,26 @@ export default function App() {
     )
   }
 
+  function getSharedContributionPlan(itemKey) {
+    return sharedContributionPlans[itemKey] ?? createEmptySharedContributionEntry()
+  }
+
+  function handleSharedContributionChange(itemKey, person, field, value) {
+    setSharedContributionPlans((currentPlans) => ({
+      ...currentPlans,
+      [itemKey]: {
+        ...(currentPlans[itemKey] ?? createEmptySharedContributionEntry()),
+        [person]: {
+          ...(currentPlans[itemKey]?.[person] ?? {
+            amount: '',
+            frequency: 'Weekly',
+          }),
+          [field]: value,
+        },
+      },
+    }))
+  }
+
   const groupedSections = budgetSections.reduce((groups, section) => {
     const existingGroup = groups.find((group) => group.title === section.category)
 
@@ -586,6 +650,7 @@ export default function App() {
 
     return [...groups, { title: section.category, sections: [section] }]
   }, [])
+  const allocatedExpenseGroups = buildAllocatedExpenseGroups(budgetSections)
 
   const shaneIncomeTotals = calculateSectionTotals(
     budgetSections.find((section) => section.id === 'shane-income')?.rows ?? [],
@@ -607,7 +672,6 @@ export default function App() {
     erikaIncomeTotals,
     erikaTransferTotals,
   )
-  const allocatedExpenseTotals = calculateAllocatedExpenseTotals(budgetSections)
 
   return (
     <main className="budget-page">
@@ -819,43 +883,300 @@ export default function App() {
             <p>Plan each person&apos;s transfers using the same time-based view as the main budget.</p>
           </div>
 
-          <section className="allocation-summary-card">
+          <section className="allocation-planning-card">
             <div className="summary-block-header">
-              <h3>Allocated Expenses Summary</h3>
-              <p>Expense totals grouped by the current allocation selected in the budget.</p>
+              <h3>Allocated Expense Planning</h3>
+              <p>Generated from all expense rows in the budget, grouped by allocation.</p>
             </div>
 
-            <div className="table-wrap">
-              <table className="budget-table allocation-summary-table">
-                <thead>
-                  <tr>
-                    <th>Allocation</th>
-                    <th>Weekly</th>
-                    <th>Fortnightly</th>
-                    <th>Monthly</th>
-                    <th>Annual</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allocationOptions.map((allocation) => (
-                    <tr key={allocation}>
-                      <td>{allocation}</td>
-                      <td className="calculated-cell">
-                        {formatAmount(allocatedExpenseTotals[allocation].weekly)}
-                      </td>
-                      <td className="calculated-cell">
-                        {formatAmount(allocatedExpenseTotals[allocation].fortnightly)}
-                      </td>
-                      <td className="calculated-cell">
-                        {formatAmount(allocatedExpenseTotals[allocation].monthly)}
-                      </td>
-                      <td className="calculated-cell">
-                        {formatAmount(allocatedExpenseTotals[allocation].annual)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="generated-planning-list">
+              <article className="budget-section">
+                <div className="summary-block-header">
+                  <h3>Shane allocated expenses</h3>
+                </div>
+
+                <div className="table-wrap">
+                  <table className="budget-table allocation-summary-table">
+                    <thead>
+                      <tr>
+                        <th>Description</th>
+                        <th>Weekly</th>
+                        <th>Fortnightly</th>
+                        <th>Monthly</th>
+                        <th>Annual</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allocatedExpenseGroups.Shane.length > 0 ? (
+                        allocatedExpenseGroups.Shane.map((item) => (
+                          <tr key={item.key}>
+                            <td>{item.description}</td>
+                            <td className="calculated-cell">
+                              {formatAmount(item.amounts.weekly)}
+                            </td>
+                            <td className="calculated-cell">
+                              {formatAmount(item.amounts.fortnightly)}
+                            </td>
+                            <td className="calculated-cell">
+                              {formatAmount(item.amounts.monthly)}
+                            </td>
+                            <td className="calculated-cell">
+                              {formatAmount(item.amounts.annual)}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="5">No Shane-allocated expenses yet.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article className="budget-section">
+                <div className="summary-block-header">
+                  <h3>Erika allocated expenses</h3>
+                </div>
+
+                <div className="table-wrap">
+                  <table className="budget-table allocation-summary-table">
+                    <thead>
+                      <tr>
+                        <th>Description</th>
+                        <th>Weekly</th>
+                        <th>Fortnightly</th>
+                        <th>Monthly</th>
+                        <th>Annual</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allocatedExpenseGroups.Erika.length > 0 ? (
+                        allocatedExpenseGroups.Erika.map((item) => (
+                          <tr key={item.key}>
+                            <td>{item.description}</td>
+                            <td className="calculated-cell">
+                              {formatAmount(item.amounts.weekly)}
+                            </td>
+                            <td className="calculated-cell">
+                              {formatAmount(item.amounts.fortnightly)}
+                            </td>
+                            <td className="calculated-cell">
+                              {formatAmount(item.amounts.monthly)}
+                            </td>
+                            <td className="calculated-cell">
+                              {formatAmount(item.amounts.annual)}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="5">No Erika-allocated expenses yet.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article className="budget-section">
+                <div className="summary-block-header">
+                  <h3>Shared allocated expenses</h3>
+                </div>
+
+                <div className="table-wrap">
+                  <table className="budget-table shared-allocation-table">
+                    <thead>
+                      <tr>
+                        <th>Description</th>
+                        <th>Weekly</th>
+                        <th>Fortnightly</th>
+                        <th>Monthly</th>
+                        <th>Annual</th>
+                        <th>Shane Amount</th>
+                        <th>Shane Frequency</th>
+                        <th>Shane Weekly</th>
+                        <th>Shane Fortnightly</th>
+                        <th>Shane Monthly</th>
+                        <th>Shane Annual</th>
+                        <th>Erika Amount</th>
+                        <th>Erika Frequency</th>
+                        <th>Erika Weekly</th>
+                        <th>Erika Fortnightly</th>
+                        <th>Erika Monthly</th>
+                        <th>Erika Annual</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allocatedExpenseGroups.Shared.length > 0 ? (
+                        allocatedExpenseGroups.Shared.map((item) => {
+                          const plan = getSharedContributionPlan(item.key)
+                          const shaneAmounts = calculateRowAmounts(plan.shane)
+                          const erikaAmounts = calculateRowAmounts(plan.erika)
+
+                          return (
+                            <tr key={item.key}>
+                              <td>{item.description}</td>
+                              <td className="calculated-cell">
+                                {formatAmount(item.amounts.weekly)}
+                              </td>
+                              <td className="calculated-cell">
+                                {formatAmount(item.amounts.fortnightly)}
+                              </td>
+                              <td className="calculated-cell">
+                                {formatAmount(item.amounts.monthly)}
+                              </td>
+                              <td className="calculated-cell">
+                                {formatAmount(item.amounts.annual)}
+                              </td>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={plan.shane.amount}
+                                  onChange={(event) =>
+                                    handleSharedContributionChange(
+                                      item.key,
+                                      'shane',
+                                      'amount',
+                                      event.target.value,
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <select
+                                  value={plan.shane.frequency}
+                                  onChange={(event) =>
+                                    handleSharedContributionChange(
+                                      item.key,
+                                      'shane',
+                                      'frequency',
+                                      event.target.value,
+                                    )
+                                  }
+                                >
+                                  {frequencyOptions.map((option) => (
+                                    <option key={option} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="calculated-cell">
+                                {formatAmount(shaneAmounts.weekly)}
+                              </td>
+                              <td className="calculated-cell">
+                                {formatAmount(shaneAmounts.fortnightly)}
+                              </td>
+                              <td className="calculated-cell">
+                                {formatAmount(shaneAmounts.monthly)}
+                              </td>
+                              <td className="calculated-cell">
+                                {formatAmount(shaneAmounts.annual)}
+                              </td>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={plan.erika.amount}
+                                  onChange={(event) =>
+                                    handleSharedContributionChange(
+                                      item.key,
+                                      'erika',
+                                      'amount',
+                                      event.target.value,
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <select
+                                  value={plan.erika.frequency}
+                                  onChange={(event) =>
+                                    handleSharedContributionChange(
+                                      item.key,
+                                      'erika',
+                                      'frequency',
+                                      event.target.value,
+                                    )
+                                  }
+                                >
+                                  {frequencyOptions.map((option) => (
+                                    <option key={option} value={option}>
+                                      {option}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="calculated-cell">
+                                {formatAmount(erikaAmounts.weekly)}
+                              </td>
+                              <td className="calculated-cell">
+                                {formatAmount(erikaAmounts.fortnightly)}
+                              </td>
+                              <td className="calculated-cell">
+                                {formatAmount(erikaAmounts.monthly)}
+                              </td>
+                              <td className="calculated-cell">
+                                {formatAmount(erikaAmounts.annual)}
+                              </td>
+                            </tr>
+                          )
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan="17">No shared expenses yet.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article className="budget-section">
+                <div className="summary-block-header">
+                  <h3>Unassigned expenses</h3>
+                </div>
+
+                <div className="table-wrap">
+                  <table className="budget-table allocation-summary-table">
+                    <thead>
+                      <tr>
+                        <th>Description</th>
+                        <th>Weekly</th>
+                        <th>Fortnightly</th>
+                        <th>Monthly</th>
+                        <th>Annual</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allocatedExpenseGroups.Unassigned.length > 0 ? (
+                        allocatedExpenseGroups.Unassigned.map((item) => (
+                          <tr key={item.key}>
+                            <td>{item.description}</td>
+                            <td className="calculated-cell">
+                              {formatAmount(item.amounts.weekly)}
+                            </td>
+                            <td className="calculated-cell">
+                              {formatAmount(item.amounts.fortnightly)}
+                            </td>
+                            <td className="calculated-cell">
+                              {formatAmount(item.amounts.monthly)}
+                            </td>
+                            <td className="calculated-cell">
+                              {formatAmount(item.amounts.annual)}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="5">No unassigned expenses.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </article>
             </div>
           </section>
 
