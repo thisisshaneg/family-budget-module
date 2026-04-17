@@ -37,8 +37,20 @@ const initialBudgetSections = [
     category: 'Expenses',
     title: 'House expenses',
     rows: [
-      { id: 1, description: 'Mortgage', amount: '780.00', frequency: 'Weekly' },
-      { id: 2, description: 'Home insurance', amount: '2100.00', frequency: 'Annually' },
+      {
+        id: 1,
+        description: 'Mortgage',
+        amount: '780.00',
+        frequency: 'Weekly',
+        allocation: 'Shared',
+      },
+      {
+        id: 2,
+        description: 'Home insurance',
+        amount: '2100.00',
+        frequency: 'Annually',
+        allocation: 'Shared',
+      },
     ],
   },
   {
@@ -46,8 +58,20 @@ const initialBudgetSections = [
     category: 'Expenses',
     title: 'Living expenses',
     rows: [
-      { id: 1, description: 'Groceries', amount: '260.00', frequency: 'Weekly' },
-      { id: 2, description: 'Internet', amount: '95.00', frequency: 'Monthly' },
+      {
+        id: 1,
+        description: 'Groceries',
+        amount: '260.00',
+        frequency: 'Weekly',
+        allocation: 'Shared',
+      },
+      {
+        id: 2,
+        description: 'Internet',
+        amount: '95.00',
+        frequency: 'Monthly',
+        allocation: 'Shared',
+      },
     ],
   },
   {
@@ -55,8 +79,20 @@ const initialBudgetSections = [
     category: 'Expenses',
     title: 'Car expenses',
     rows: [
-      { id: 1, description: 'Fuel', amount: '140.00', frequency: 'Weekly' },
-      { id: 2, description: 'Car registration', amount: '420.00', frequency: 'Annually' },
+      {
+        id: 1,
+        description: 'Fuel',
+        amount: '140.00',
+        frequency: 'Weekly',
+        allocation: 'Shared',
+      },
+      {
+        id: 2,
+        description: 'Car registration',
+        amount: '420.00',
+        frequency: 'Annually',
+        allocation: 'Shared',
+      },
     ],
   },
   {
@@ -64,8 +100,20 @@ const initialBudgetSections = [
     category: 'Expenses',
     title: 'Erika personal expenses',
     rows: [
-      { id: 1, description: 'Gym membership', amount: '25.00', frequency: 'Weekly' },
-      { id: 2, description: 'Hair appointments', amount: '90.00', frequency: 'Monthly' },
+      {
+        id: 1,
+        description: 'Gym membership',
+        amount: '25.00',
+        frequency: 'Weekly',
+        allocation: 'Erika',
+      },
+      {
+        id: 2,
+        description: 'Hair appointments',
+        amount: '90.00',
+        frequency: 'Monthly',
+        allocation: 'Erika',
+      },
     ],
   },
   {
@@ -73,8 +121,20 @@ const initialBudgetSections = [
     category: 'Expenses',
     title: 'Shane personal expenses',
     rows: [
-      { id: 1, description: 'Sports fees', amount: '35.00', frequency: 'Weekly' },
-      { id: 2, description: 'Streaming subscriptions', amount: '28.00', frequency: 'Monthly' },
+      {
+        id: 1,
+        description: 'Sports fees',
+        amount: '35.00',
+        frequency: 'Weekly',
+        allocation: 'Shane',
+      },
+      {
+        id: 2,
+        description: 'Streaming subscriptions',
+        amount: '28.00',
+        frequency: 'Monthly',
+        allocation: 'Shane',
+      },
     ],
   },
   {
@@ -82,8 +142,20 @@ const initialBudgetSections = [
     category: 'Expenses',
     title: 'Kids expenses',
     rows: [
-      { id: 1, description: 'School lunches', amount: '75.00', frequency: 'Weekly' },
-      { id: 2, description: 'School supplies', amount: '600.00', frequency: 'Annually' },
+      {
+        id: 1,
+        description: 'School lunches',
+        amount: '75.00',
+        frequency: 'Weekly',
+        allocation: 'Shared',
+      },
+      {
+        id: 2,
+        description: 'School supplies',
+        amount: '600.00',
+        frequency: 'Annually',
+        allocation: 'Shared',
+      },
     ],
   },
   {
@@ -91,8 +163,20 @@ const initialBudgetSections = [
     category: 'Expenses',
     title: 'Savings',
     rows: [
-      { id: 1, description: 'Emergency fund', amount: '200.00', frequency: 'Fortnightly' },
-      { id: 2, description: 'Holiday savings', amount: '150.00', frequency: 'Monthly' },
+      {
+        id: 1,
+        description: 'Emergency fund',
+        amount: '200.00',
+        frequency: 'Fortnightly',
+        allocation: 'Shared',
+      },
+      {
+        id: 2,
+        description: 'Holiday savings',
+        amount: '150.00',
+        frequency: 'Monthly',
+        allocation: 'Shared',
+      },
     ],
   },
   {
@@ -100,8 +184,20 @@ const initialBudgetSections = [
     category: 'Expenses',
     title: 'Investing',
     rows: [
-      { id: 1, description: 'Index fund', amount: '180.00', frequency: 'Fortnightly' },
-      { id: 2, description: 'Kids investment account', amount: '60.00', frequency: 'Monthly' },
+      {
+        id: 1,
+        description: 'Index fund',
+        amount: '180.00',
+        frequency: 'Fortnightly',
+        allocation: 'Shared',
+      },
+      {
+        id: 2,
+        description: 'Kids investment account',
+        amount: '60.00',
+        frequency: 'Monthly',
+        allocation: 'Shared',
+      },
     ],
   },
 ]
@@ -210,7 +306,7 @@ function isValidTransferSections(value) {
 function getInitialAppState() {
   if (typeof window === 'undefined') {
     return {
-      budgetSections: initialBudgetSections,
+      budgetSections: normalizeBudgetSections(initialBudgetSections),
       transferSections: initialTransferSections,
     }
   }
@@ -219,7 +315,7 @@ function getInitialAppState() {
 
   if (!savedData) {
     return {
-      budgetSections: initialBudgetSections,
+      budgetSections: normalizeBudgetSections(initialBudgetSections),
       transferSections: initialTransferSections,
     }
   }
@@ -246,13 +342,13 @@ function getInitialAppState() {
     }
   } catch {
     return {
-      budgetSections: initialBudgetSections,
+      budgetSections: normalizeBudgetSections(initialBudgetSections),
       transferSections: initialTransferSections,
     }
   }
 
   return {
-    budgetSections: initialBudgetSections,
+    budgetSections: normalizeBudgetSections(initialBudgetSections),
     transferSections: initialTransferSections,
   }
 }
